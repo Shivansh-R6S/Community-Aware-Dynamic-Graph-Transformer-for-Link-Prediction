@@ -84,8 +84,8 @@ Result:
   - RAM: 8 GB
   - GPU: Not required
 - Decision:
-✔ Structural modeling runs locally
-✔ No Colab needed for current pipeline
+Structural modeling runs locally
+No Colab needed for current pipeline
 
 ---
 
@@ -97,4 +97,21 @@ Result:
   - Capture temporal evolution of node relationships
 
 Status:
-⏳ Not started
+Not started
+
+## Phase 1: Temporal Modeling (Baseline)
+
+✔ Built GraphSAGE structural encoder (128-dim output)
+✔ Extracted community features (size, intra-degree, inter-degree)
+✔ Integrated structural encoder + community features
+✔ Designed and implemented Temporal Transformer
+✔ Used learnable positional encoding
+✔ Used 2-layer transformer encoder (4 heads, d_model=128)
+✔ Verified shape flow:
+    - Structural embeddings: (N, 128)
+    - Stacked temporal input: (T-1, N, 128)
+    - Final temporal embeddings: (N, 128)
+
+Decision:
+Use one-step ahead prediction protocol:
+    Snapshots 1–10 → predict links in snapshot 11
