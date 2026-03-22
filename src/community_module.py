@@ -5,95 +5,48 @@ import community as community_louvain
 
 def extract_community_features(G):
     """
-    Extract community-aware features from a NetworkX graph.
-
-    Returns:
-        Tensor of shape [num_nodes, 3]
-        Columns:
-        [community_size, intra_degree, inter_degree]
+    Returns Tensor (N, 6):
+    [community_size, intra_degree, inter_degree, degree, clustering, pagerank]
     """
-
-    num_nodes = G.number_of_nodes()
-
-    # Run Louvain
-    partition = community_louvain.best_partition(G)
-
-    # Build community groups
+    num_nodes   = G.number_of_nodes()
+    partition   = community_louvain.best_partition(G, random_state=42)
     communities = {}
-    for node, comm_id in partition.items():
-        communities.setdefault(comm_id, []).append(node)
+    for node, cid in partition.items():
+        communities.setdefault(cid, []).append(node)
+    comm_size = {cid: len(nodes) for cid, nodes in communities.items()}
 
-    # Precompute community sizes
-    community_size = {
-        comm_id: len(nodes)
-        for comm_id, nodes in communities.items()
-    }
-
-    # Feature tensors
-    community_size_feat = torch.zeros(num_nodes)
-    intra_degree_feat = torch.zeros(num_nodes)
-    inter_degree_feat = torch.zeros(num_nodes)
+    cs_feat = torch.zeros(num_nodes)
+    ia_feat = torch.zeros(num_nodes)
+    ie_feat = torch.zeros(num_nodes)
 
     for node in G.nodes():
-
-        node_comm = partition[node]
-        community_size_feat[node] = community_size[node_comm]
-
-        intra_deg = 0
-        inter_deg = 0
-
-        for neighbor in G.neighbors(node):
-            if partition[neighbor] == node_comm:
-                intra_deg += 1
+        nc = partition[node]
+        cs_feat[node] = comm_size[nc]
+        ia, ie = 0, 0
+        for nb in G.neighbors(node):
+            if partition[nb] == nc:
+                ia += 1
             else:
-                inter_deg += 1
+                ie += 1
+        ia_feat[node] = ia
+        ie_feat[node] = ie
 
-        intra_degree_feat[node] = intra_deg
-        inter_degree_feat[node] = inter_deg
+    deg_dict  = dict(G.degree())
+    clust     = nx.clustering(G)
+    pr        = nx.pagerank(G, alpha=0.85, max_iter=100)
 
-    features = torch.stack(
-        [
-            community_size_feat,
-            intra_degree_feat,
-            inter_degree_feat
-        ],
-        dim=1
-    )
+    d_feat  = torch.tensor([deg_dict[n]  for n in range(num_nodes)], dtype=torch.float)
+    c_feat  = torch.tensor([clust[n]     for n in range(num_nodes)], dtype=torch.float)
+    p_feat  = torch.tensor([pr[n]        for n in range(num_nodes)], dtype=torch.float)
 
-    return features
+    return torch.stack([cs_feat, ia_feat, ie_feat, d_feat, c_feat, p_feat], dim=1)
 
 
 def extract_all_snapshots_community_features(snapshots):
-
-    print("\nExtracting community features...")
-
-    features_list = []
-
+    print("\nExtracting community + structural features...")
+    out = []
     for i, G in enumerate(snapshots):
-        print(f"Processing snapshot {i+1}/{len(snapshots)}")
-        features = extract_community_features(G)
-        features_list.append(features)
-
-    print("Community extraction complete.")
-
-    return features_list
-
-
-if __name__ == "__main__":
-
-    from snapshot_builder import build_rolling_cumulative_snapshots
-    from data_loader import load_fb_forum
-    import os
-
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    data_path = os.path.join(BASE_DIR, "data", "raw", "fb-forum.txt")
-
-    df, node_mapping = load_fb_forum(data_path)
-    num_nodes = len(node_mapping)
-
-    snapshots = build_rolling_cumulative_snapshots(df, num_nodes)
-
-    features_list = extract_all_snapshots_community_features(snapshots)
-
-    print("\nFeature shape for first snapshot:")
-    print(features_list[0].shape)
+        print(f"  Snapshot {i+1}/{len(snapshots)}")
+        out.append(extract_community_features(G))
+    print("Done.")
+    return out
